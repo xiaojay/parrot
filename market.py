@@ -10,6 +10,35 @@ class Market(object):
         self.issuer = issuer
         self.server = jsonrpclib.Server(RIPPLED_SERVER)
     
+    def add_private_info(self, address, secret=''):
+        self.address = address
+        self.secret = secret
+    
+    def get_balance(self):
+        params = {'account':self.address}
+        xrp_balance = self.server.account_info(params)['account_data']['Balance']
+        xrp_balance = trunc(float(xrp_balance)/1000000)
+        r = self.server.account_lines(params)
+        for line in r['lines']:
+            if line['account'] == self.issuer:
+                cny_balance = line['balance']
+                cny_balance = trunc(float(cny_balance))
+        return {'xrp':xrp_balance, 'cny':cny_balance}
+    
+    def buy(self, price, amount):
+        value = str(trunc(price*amount,2) + 0.01)
+        gets = {'currency': 'CNY','issuer': self.issuer, 'value': value}
+        params = {'secret':self.secret, 
+                  'tx_json': {'TransactionType':'OfferCreate', 'Account':self.address,'TakerGets':gets, "TakerPays": str(amount*1000000)}}
+        return self.server.submit(params)
+    
+    def sell(self, price, amount):
+        value = str(trunc(price*amount,2) - 0.01)
+        pays = {'currency': 'CNY','issuer': self.issuer, 'value': value}
+        params = {'secret':self.secret, 
+                  'tx_json': {'TransactionType':'OfferCreate', 'Account':self.address,'TakerGets':str(amount*1000000), "TakerPays":pays}}
+        return self.server.submit(params)
+
     def get_depth(self):
         ask_params = {'taker_pays':{'currency':'CNY', 'issuer':self.issuer}, 'taker_gets':{'currency':'XRP'}}
         asks = self.server.book_offers(ask_params)
